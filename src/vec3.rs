@@ -1,4 +1,4 @@
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, Mul, Neg, Sub};
 
 use crate::quat::Quat;
 
@@ -54,6 +54,19 @@ impl Sub<Vec3> for Vec3 {
             x: self.x - other.x,
             y: self.y - other.y,
             z: self.z - other.z,
+        }
+    }
+}
+
+impl Neg for Vec3 {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        let Vec3 { x, y, z } = self;
+        Self {
+            x: -x,
+            y: -y,
+            z: -z,
         }
     }
 }
