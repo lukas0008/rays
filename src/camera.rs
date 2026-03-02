@@ -55,9 +55,9 @@ impl Mul<Quat> for Camera {
     type Output = Self;
 
     fn mul(self, quat: Quat) -> Self {
-        let forward = quat * self.forward;
-        let up = quat * self.up;
-        let right = quat * self.right;
+        let forward = (quat * self.forward).normalize();
+        let up = (quat * self.up).normalize();
+        let right = (quat * self.right).normalize();
         Self {
             position: self.position,
             forward,

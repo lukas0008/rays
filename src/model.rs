@@ -1,3 +1,5 @@
+use std::ops::{Mul, MulAssign};
+
 use crate::{
     quat::Quat,
     triangle::{FatTriangle, Triangle},
@@ -56,5 +58,30 @@ impl Model {
         self.triangles
             .iter()
             .map(|t| *t * self.rotation + self.transform)
+    }
+}
+
+impl Mul<Quat> for Model {
+    type Output = Self;
+
+    fn mul(self, quat: Quat) -> Self {
+        Self {
+            rotation: quat * self.rotation,
+            ..self
+        }
+    }
+}
+
+impl Mul<Model> for Quat {
+    type Output = Model;
+
+    fn mul(self, model: Model) -> Self::Output {
+        model * self
+    }
+}
+
+impl MulAssign<Quat> for Model {
+    fn mul_assign(&mut self, quat: Quat) {
+        self.rotation = quat * self.rotation;
     }
 }

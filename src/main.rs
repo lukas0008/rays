@@ -50,6 +50,7 @@ fn main() {
         Color(0xFFFF0000),
     )
     .into();
+    let model = Model::new(vec![triangle, triangle2]);
     let mut camera = camera::Camera::new(
         (0.0, 1.0, -5.0).into(),
         (0.0, 0.0, 1.0).into(),
@@ -57,8 +58,7 @@ fn main() {
         90.0,
     );
     let monki = parse_obj(include_str!("./monki.obj")).unwrap();
-    let model = Model::new(vec![triangle, triangle2]);
-    let models = vec![model, monki];
+    let mut models = vec![model, monki];
     #[cfg(feature = "stuff")]
     {
         use std::sync::{Arc, atomic::AtomicBool};
@@ -72,7 +72,7 @@ fn main() {
         std::thread::spawn(move || {
             while receiver.recv().is_ok() && a.load(std::sync::atomic::Ordering::Relaxed) {}
         });
-        paint_scene(scene, sender);
+        paint_scene(scene, sender, Arc::new(AtomicBool::new(true)));
         b.store(false, std::sync::atomic::Ordering::Relaxed);
         return;
     }
@@ -87,6 +87,7 @@ fn main() {
         () => {{
             reset_running(&mut current_running);
             let current_running = current_running.clone();
+            models[1] *= Quat::from_euler_angles(0., 0.01, 0.);
             let scene = Scene {
                 models: models.clone(),
                 camera: camera.clone(),
@@ -129,7 +130,7 @@ fn main() {
                     camera.position.y += 1.;
                     run_new!();
                 }
-                PhysicalKey::Code(KeyCode::ShiftLeft) if event.state.is_pressed() => {
+                PhysicalKey::Code(KeyCode::ControlLeft) if event.state.is_pressed() => {
                     camera.position.y -= 1.;
                     run_new!();
                 }
