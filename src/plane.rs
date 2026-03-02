@@ -6,6 +6,7 @@ pub struct Plane {
 }
 
 impl Plane {
+    #[inline]
     pub fn intersect(&self, ray: &Ray) -> Option<Vec3> {
         let denom = self.normal.dot(&ray.direction);
         if denom.abs() < 1e-6 {

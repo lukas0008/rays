@@ -6,9 +6,13 @@ edition = "2024"
 [profile.release]
 debug = true
 
+[features]
+stuff = []
+
 [dependencies]
 arc-swap = "1.8.2"
 bytemuck = "1.25.0"
+itertools = "0.14.0"
 pixels = "0.15.0"
 pollster = "0.4.0"
 rand = "0.10.0"

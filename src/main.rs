@@ -1,4 +1,6 @@
-use std::sync::{Arc, atomic::AtomicBool};
+#![feature(portable_simd)]
+
+use std::sync::{Arc, atomic::AtomicBool, mpsc::SyncSender};
 
 use crate::{
     color::Color,
@@ -57,7 +59,9 @@ fn main() {
     let monki = parse_obj(include_str!("./monki.obj")).unwrap();
     let model = Model::new(vec![triangle, triangle2]);
     let models = vec![model, monki];
+    #[cfg(feature = "stuff")]
     {
+        use std::sync::{Arc, atomic::AtomicBool};
         let (sender, receiver) = std::sync::mpsc::sync_channel(1024);
         let scene = Scene {
             models,
@@ -74,6 +78,26 @@ fn main() {
     }
     let (mut renderer, frame_sender) = Renderer::new((WIDTH, HEIGHT));
     frame_sender.send(FrameUpdate::Clear(0.into())).unwrap();
+    let mut current_running = Arc::new(AtomicBool::new(true));
+    fn reset_running(current_running: &mut Arc<AtomicBool>) {
+        current_running.store(false, std::sync::atomic::Ordering::Relaxed);
+        *current_running = Arc::new(AtomicBool::new(true));
+    }
+    macro_rules! run_new {
+        () => {{
+            reset_running(&mut current_running);
+            let current_running = current_running.clone();
+            let scene = Scene {
+                models: models.clone(),
+                camera: camera.clone(),
+            };
+            let frame_sender = frame_sender.clone();
+            std::thread::spawn(move || {
+                paint_scene(scene, frame_sender, current_running);
+                dbg!("done");
+            });
+        }};
+    };
     renderer.set_on_event(move |ev| {
         if let WindowEvent::KeyboardInput {
             device_id: _,
@@ -83,44 +107,47 @@ fn main() {
         {
             match event.physical_key {
                 PhysicalKey::Code(KeyCode::Enter) if event.state.is_pressed() => {
-                    let frame_sender = frame_sender.clone();
-                    let camera = camera.clone();
-                    let models = models.clone();
-                    std::thread::spawn(move || {
-                        frame_sender.send(FrameUpdate::Clear(0.into())).unwrap();
-                        paint_scene(Scene { models, camera }, frame_sender);
-                        dbg!("done");
-                    });
+                    run_new!();
                 }
                 PhysicalKey::Code(KeyCode::KeyD) if event.state.is_pressed() => {
                     camera.position.x += 1.;
+                    run_new!();
                 }
                 PhysicalKey::Code(KeyCode::KeyA) if event.state.is_pressed() => {
                     camera.position.x -= 1.;
+                    run_new!();
                 }
                 PhysicalKey::Code(KeyCode::KeyW) if event.state.is_pressed() => {
                     camera.position.z += 1.;
+                    run_new!();
                 }
                 PhysicalKey::Code(KeyCode::KeyS) if event.state.is_pressed() => {
                     camera.position.z -= 1.;
+                    run_new!();
                 }
                 PhysicalKey::Code(KeyCode::Space) if event.state.is_pressed() => {
                     camera.position.y += 1.;
+                    run_new!();
                 }
                 PhysicalKey::Code(KeyCode::ShiftLeft) if event.state.is_pressed() => {
                     camera.position.y -= 1.;
+                    run_new!();
                 }
                 PhysicalKey::Code(KeyCode::ArrowLeft) if event.state.is_pressed() => {
                     camera *= Quat::from_euler_angles(0., -0.1, 0.);
+                    run_new!();
                 }
                 PhysicalKey::Code(KeyCode::ArrowRight) if event.state.is_pressed() => {
                     camera *= Quat::from_euler_angles(0., 0.1, 0.);
+                    run_new!();
                 }
                 PhysicalKey::Code(KeyCode::ArrowUp) if event.state.is_pressed() => {
                     camera *= Quat::from_euler_angles(-0.1, 0., 0.);
+                    run_new!();
                 }
                 PhysicalKey::Code(KeyCode::ArrowDown) if event.state.is_pressed() => {
                     camera *= Quat::from_euler_angles(0.1, 0., 0.);
+                    run_new!();
                 }
                 _ => {}
             }

@@ -1,4 +1,8 @@
-use std::ops::{Add, Mul, Neg, Sub};
+use core::simd;
+use std::{
+    ops::{Add, Mul, Neg, Sub},
+    simd::{Simd, num::SimdFloat},
+};
 
 use crate::quat::Quat;
 
@@ -19,11 +23,13 @@ impl Add<Vec3> for Vec3 {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
-        Self {
-            x: self.x + other.x,
-            y: self.y + other.y,
-            z: self.z + other.z,
-        }
+        // simd average improvement negligable, but more stable
+        (self.simd() + other.simd()).into()
+        // Self {
+        //     x: self.x + other.x,
+        //     y: self.y + other.y,
+        //     z: self.z + other.z,
+        // }
     }
 }
 
@@ -49,12 +55,27 @@ impl Mul<Vec3> for f32 {
 impl Sub<Vec3> for Vec3 {
     type Output = Self;
 
+    #[inline]
     fn sub(self, other: Self) -> Self {
-        Self {
-            x: self.x - other.x,
-            y: self.y - other.y,
-            z: self.z - other.z,
-        }
+        // simd improved perf by (at least) 20% (release, as total percentage)
+        (self.simd() - other.simd()).into()
+        // Self {
+        //     x: self.x - other.x,
+        //     y: self.y - other.y,
+        //     z: self.z - other.z,
+        // }
+    }
+}
+
+impl From<Vec3> for Simd<f32, 3> {
+    fn from(vec: Vec3) -> Self {
+        Self::from_array([vec.x, vec.y, vec.z])
+    }
+}
+
+impl From<Simd<f32, 3>> for Vec3 {
+    fn from(simd: Simd<f32, 3>) -> Self {
+        (simd[0], simd[1], simd[2]).into()
     }
 }
 
@@ -75,15 +96,26 @@ impl Vec3 {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         (x, y, z).into()
     }
+    #[inline]
     pub fn dot(&self, other: &Self) -> f32 {
-        self.x * other.x + self.y * other.y + self.z * other.z
+        (self.simd() * other.simd()).reduce_sum()
+        // self.x * other.x + self.y * other.y + self.z * other.z
     }
+    #[inline]
     pub fn cross(&self, other: &Self) -> Self {
-        Self {
-            x: self.y * other.z - self.z * other.y,
-            y: self.z * other.x - self.x * other.z,
-            z: self.x * other.y - self.y * other.x,
-        }
+        // Same perf as non-simd
+        let s1 = self.simd();
+        (s1.rotate_elements_left::<1>() * other.simd().rotate_elements_right::<1>()
+            - s1.rotate_elements_right::<1>() * other.simd().rotate_elements_left::<1>())
+        .into()
+        // Self {
+        //     x: self.y * other.z - self.z * other.y,
+        //     y: self.z * other.x - self.x * other.z,
+        //     z: self.x * other.y - self.y * other.x,
+        // }
+    }
+    pub fn simd(self) -> Simd<f32, 3> {
+        self.into()
     }
     pub fn len(&self) -> f32 {
         self.dot(self).sqrt()
@@ -92,11 +124,11 @@ impl Vec3 {
         self.dot(self)
     }
     pub fn normalize(&self) -> Self {
-        let len = self.len();
+        let i_len = 1. / self.len();
         Self {
-            x: self.x / len,
-            y: self.y / len,
-            z: self.z / len,
+            x: self.x * i_len,
+            y: self.y * i_len,
+            z: self.z * i_len,
         }
     }
     pub fn rotate(&self, quat: Quat) -> Self {
