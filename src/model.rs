@@ -4,6 +4,7 @@ use crate::{
     vec3::Vec3,
 };
 
+#[derive(Clone, Debug)]
 pub struct Model {
     pub triangles: Vec<FatTriangle>,
     pub rotation: Quat,

@@ -1,5 +1,8 @@
-use crate::{camera::Camera, vec2::Vec2};
-use std::sync::Arc;
+use crate::{color::Color, vec2::Vec2};
+use std::sync::{
+    Arc,
+    mpsc::{self, Receiver, SyncSender},
+};
 use wgpu::Trace;
 use winit::{
     application::ApplicationHandler,
@@ -9,18 +12,33 @@ use winit::{
 };
 
 pub struct Renderer {
-    pub camera: Camera,
     pub models: Vec<crate::model::Model>,
     pub state: Option<RunningState>,
+    pub frame_receiver: Receiver<FrameUpdate>,
+    pub frame: Vec<u8>,
+    pub init_size: (u32, u32),
+}
+
+pub enum FrameUpdate {
+    Full(Vec<u8>),
+    Partial { idx: usize, data: Vec<u8> },
+    Individual { idx: usize, color: Color },
+    Clear(Color),
 }
 
 impl Renderer {
-    pub fn new(camera: Camera) -> Self {
-        Self {
-            camera,
-            models: Vec::new(),
-            state: None,
-        }
+    pub fn new(init_size: (u32, u32)) -> (Self, SyncSender<FrameUpdate>) {
+        let (sender, frame_receiver) = mpsc::sync_channel(1024);
+        (
+            Self {
+                models: Vec::new(),
+                state: None,
+                frame_receiver,
+                frame: vec![0u8; init_size.0 as usize * init_size.1 as usize * 4],
+                init_size,
+            },
+            sender,
+        )
     }
 }
 pub(crate) struct RunningState {
@@ -37,6 +55,8 @@ pub(crate) struct RunningState {
     pub render_pipeline: wgpu::RenderPipeline,
     pub bind_group: wgpu::BindGroup,
     pub sampler: wgpu::Sampler,
+    pub texture: wgpu::Texture,
+    pub frame_counter: usize,
     // pub first_paint: bool,
     // pub render_pipeline: wgpu::RenderPipeline,
     // pub vertex_buffer: wgpu::Buffer,
@@ -53,12 +73,12 @@ impl ApplicationHandler for Renderer {
                     .with_resizable(false)
                     .with_transparent(false)
                     .with_decorations(false)
-                    .with_base_size(PhysicalSize::new(800, 600)),
+                    .with_base_size(PhysicalSize::new(self.init_size.0, self.init_size.1)),
             )
             .expect("Failed to create window");
         let window = Arc::new(window);
         window.set_visible(true);
-        let size = window.inner_size();
+        window.set_transparent(true);
 
         let size = window.inner_size();
         let scale_factor = window.scale_factor();
@@ -113,15 +133,20 @@ impl ApplicationHandler for Renderer {
             width: size.width,
             height: size.height,
             present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes[0],
+            alpha_mode: surface_caps
+                .alpha_modes
+                .iter()
+                .cloned()
+                .find(|v| *v == wgpu::CompositeAlphaMode::PreMultiplied)
+                .unwrap_or(surface_caps.alpha_modes[0]),
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
 
         surface.configure(&device, &config);
 
-        let vshader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
-        let fshader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+        let vshader = device.create_shader_module(wgpu::include_wgsl!("vert.wgsl"));
+        let fshader = device.create_shader_module(wgpu::include_wgsl!("frag.wgsl"));
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("texture_bind_group_layout"),
@@ -181,7 +206,7 @@ impl ApplicationHandler for Renderer {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[&bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -224,6 +249,8 @@ impl ApplicationHandler for Renderer {
             render_pipeline,
             bind_group,
             sampler,
+            texture,
+            frame_counter: 0,
         });
 
         window.request_redraw();
@@ -244,6 +271,7 @@ impl ApplicationHandler for Renderer {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
+                state.frame_counter += 1;
                 let frame = state.surface.get_current_texture().unwrap();
                 let view = frame
                     .texture
@@ -251,6 +279,49 @@ impl ApplicationHandler for Renderer {
                 let mut encoder = state
                     .device
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+                let mut texture_dirty = false;
+                while let Ok(frame) = self.frame_receiver.try_recv() {
+                    match frame {
+                        FrameUpdate::Full(data) => self.frame = data,
+                        FrameUpdate::Partial { idx, data } => {
+                            let start = idx;
+                            let end = start + data.len();
+                            self.frame[start..end].copy_from_slice(&data);
+                        }
+                        FrameUpdate::Individual { idx, color } => {
+                            let start = idx;
+                            self.frame[start..start + 4].copy_from_slice(&color.0.to_be_bytes());
+                        }
+                        FrameUpdate::Clear(color) => {
+                            for pixel in self.frame.chunks_exact_mut(4) {
+                                pixel.copy_from_slice(&color.0.to_be_bytes());
+                            }
+                        }
+                    }
+                    texture_dirty = true;
+                }
+                if texture_dirty {
+                    state.queue.write_texture(
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &state.texture, // the texture you created earlier
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        &self.frame, // &[u8] CPU buffer
+                        wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(4 * state.size.width),
+                            rows_per_image: Some(state.size.height),
+                        },
+                        wgpu::Extent3d {
+                            width: state.size.width,
+                            height: state.size.height,
+                            depth_or_array_layers: 1,
+                        },
+                    );
+                }
 
                 {
                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

@@ -17,19 +17,21 @@ impl Camera {
             forward: forward.normalize(),
             up,
             right,
-            fov,
+            fov: fov.to_radians(),
         }
     }
     pub fn get_ray(&self, size: Vec2, Vec2 { x, y }: Vec2) -> crate::ray::Ray {
         let aspect_ratio = size.x / size.y;
-        let fov_adjustment = (self.fov.to_radians() / 2.0).tan();
-        let sensor_x = (2.0 * (x + 0.5) / size.x - 1.0) * aspect_ratio * fov_adjustment;
-        let sensor_y = (1.0 - 2.0 * (y + 0.5) / size.y) * fov_adjustment;
+        let plane_size = (self.fov / 2.).atan() / aspect_ratio;
+        let plane_center = self.position + self.forward;
+        let vector_point =
+            plane_center + x * self.right * aspect_ratio * plane_size + y * self.up * plane_size;
 
-        let ray_direction = (self.forward + self.right * sensor_x + self.up * sensor_y).normalize();
+        let ray_direction = (vector_point - self.position).normalize();
+
         crate::ray::Ray {
             origin: self.position,
-            direction: ray_direction,
+            direction: ray_direction.normalize(),
         }
     }
 }
