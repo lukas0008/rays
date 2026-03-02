@@ -107,3 +107,19 @@ impl Vec3 {
         *self + (quat.w * uv) + uuv
     }
 }
+
+impl Mul<Quat> for Vec3 {
+    type Output = Self;
+
+    fn mul(self, quat: Quat) -> Self {
+        self.rotate(quat)
+    }
+}
+
+impl Mul<Vec3> for Quat {
+    type Output = Vec3;
+
+    fn mul(self, vec: Vec3) -> Vec3 {
+        vec.rotate(self)
+    }
+}

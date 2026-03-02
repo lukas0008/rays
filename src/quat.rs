@@ -1,5 +1,6 @@
 use std::ops::Mul;
 
+#[derive(Clone, Copy, Debug)]
 pub struct Quat {
     pub x: f32,
     pub y: f32,
@@ -24,6 +25,14 @@ impl Quat {
             x: sp * cy * cr - cp * sy * sr,
             y: cp * sy * cr + sp * cy * sr,
             z: cp * cy * sr - sp * sy * cr,
+        }
+    }
+    pub fn identity() -> Self {
+        Self {
+            x: 0.,
+            y: 0.,
+            z: 0.,
+            w: 1.,
         }
     }
 }

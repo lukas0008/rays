@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use pixels::{Pixels, SurfaceTexture};
+use pixels::{Pixels, SurfaceTexture, wgpu::Color as WColor};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -11,21 +11,26 @@ use winit::{
 
 use crate::{
     camera::Camera,
+    color::Color,
+    model::Model,
     triangle::{FatTriangle, Triangle},
 };
 
 mod camera;
+mod color;
 mod model;
 mod plane;
 mod quat;
 mod ray;
+mod render;
 mod triangle;
 mod vec2;
 mod vec3;
+mod vertex;
 
 struct Renderer {
     camera: Camera,
-    triangle: FatTriangle,
+    models: Vec<Model>,
     x: u32,
     y: u32,
     pixels: Option<Pixels<'static>>,
@@ -38,6 +43,8 @@ impl ApplicationHandler for Renderer {
             .create_window(
                 WindowAttributes::default()
                     .with_resizable(false)
+                    .with_transparent(false)
+                    .with_decorations(false)
                     .with_base_size(PhysicalSize::new(800, 600)),
             )
             .expect("Failed to create window");
@@ -50,7 +57,14 @@ impl ApplicationHandler for Renderer {
         let surface_texture = SurfaceTexture::new(size.width, size.height, window.clone());
 
         let mut pixels = Pixels::new(800, 600, surface_texture).unwrap();
-        pixels.set_present_mode(pixels::wgpu::PresentMode::Immediate);
+        pixels.set_present_mode(pixels::wgpu::PresentMode::Fifo);
+        pixels.clear_color(WColor {
+            r: 0.,
+            g: 0.,
+            b: 0.,
+            a: 0.5,
+        });
+        dbg!(pixels.render_texture_format());
 
         self.pixels = Some(pixels);
         window.request_redraw();
@@ -71,7 +85,12 @@ impl ApplicationHandler for Renderer {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
-                let pixels_count = 10000;
+                let triangles = self
+                    .models
+                    .iter()
+                    .flat_map(|m| m.triangles())
+                    .collect::<Vec<_>>();
+                let pixels_count = 10;
                 for _ in 0..pixels_count {
                     let x = self.x;
                     let y = self.y;
@@ -92,14 +111,21 @@ impl ApplicationHandler for Renderer {
                         },
                     );
 
-                    let intersection = self.triangle.intersect(&ray);
+                    let intersect = triangles
+                        .iter()
+                        .find_map(|t| t.intersect(&ray).map(|v| (t, v)));
                     // flip y because pixels are stored from top to bottom
                     let y = 599 - y;
-                    pixels.frame_mut()[((y * 800 + x) * 4) as usize] = 255;
-                    if intersection.is_some() {
-                        pixels.frame_mut()[((y * 800 + x) * 4) as usize + 1] = 255;
+                    let idx = ((y * 800 + x) * 4) as usize;
+                    pixels.frame_mut()[idx] = 255;
+                    if let Some((t, _v)) = intersect {
+                        let c = t.triangle.color;
+                        pixels.frame_mut()[idx] = c.r();
+                        pixels.frame_mut()[idx + 1] = c.g();
+                        pixels.frame_mut()[idx + 2] = c.b();
+                        pixels.frame_mut()[idx + 3] = c.a();
                     }
-                    pixels.frame_mut()[((y * 800 + x) * 4) as usize + 3] = 255;
+                    // pixels.frame_mut()[((y * 800 + x) * 4) as usize + 3] = 255;
                 }
                 pixels.render().unwrap();
                 if let Some(window) = &self.window {
@@ -116,47 +142,32 @@ impl ApplicationHandler for Renderer {
 fn main() {
     let eloop = EventLoop::new().unwrap();
     let triangle: FatTriangle = Triangle::new(
-        vec3::Vec3 {
-            x: 1.0,
-            y: 0.0,
-            z: 0.0,
-        },
-        vec3::Vec3 {
-            x: 2.0,
-            y: 0.0,
-            z: 0.0,
-        },
-        vec3::Vec3 {
-            x: 0.0,
-            y: 0.5,
-            z: 0.0,
-        },
+        (1.0, 0.0, 0.0).into(),
+        (2.0, 0.0, -1.0).into(),
+        (2.0, 0.5, 0.0).into(),
+        Color(0xFFFFFFFF),
+    )
+    .into();
+    let triangle2: FatTriangle = Triangle::new(
+        (2.0, 0.0, 0.0).into(),
+        (0.0, 0.5, 0.0).into(),
+        (5.0, -5.0, 0.0).into(),
+        Color(0xFFFF00FF),
     )
     .into();
     let camera = camera::Camera::new(
-        vec3::Vec3 {
-            x: 0.0,
-            y: 1.0,
-            z: -5.0,
-        },
-        vec3::Vec3 {
-            x: 0.0,
-            y: 0.0,
-            z: 1.0,
-        },
-        vec3::Vec3 {
-            x: 0.0,
-            y: 1.0,
-            z: 0.0,
-        },
+        (0.0, 1.0, -5.0).into(),
+        (0.0, 0.0, 1.0).into(),
+        (0.0, 1.0, 0.0).into(),
         90.0,
     );
+    let model = Model::new(vec![triangle, triangle2]);
     eloop
         .run_app(&mut Renderer {
             camera,
-            triangle,
             x: 0,
             y: 0,
+            models: vec![model],
             pixels: None,
             window: None,
         })
