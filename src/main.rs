@@ -98,7 +98,7 @@ fn main() {
                 dbg!("done");
             });
         }};
-    };
+    }
     renderer.set_on_event(move |ev| {
         if let WindowEvent::KeyboardInput {
             device_id: _,
