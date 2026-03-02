@@ -32,20 +32,29 @@ pub fn parse_obj(obj: &str) -> Option<Model> {
         .collect::<Vec<_>>();
     let triangles = obj
         .iter()
-        .filter_map(|line| {
+        .flat_map(|line| {
             if line.starts_with("f ") {
                 let mut line = line.split(" ");
                 line.next()?;
-                Some(Triangle::new(
-                    verticies[get_v(&mut line)?],
-                    verticies[get_v(&mut line)?],
-                    verticies[get_v(&mut line)?],
-                    0xFFFFFF.into(),
-                ))
+                let v1 = verticies[get_v(&mut line)?];
+                let v2 = verticies[get_v(&mut line)?];
+                let v3 = verticies[get_v(&mut line)?];
+                let triangle = Triangle::new(v1, v2, v3, 0xFFFFFF.into());
+                if let Some(v4) = get_v(&mut line) {
+                    let v4 = verticies[v4];
+                    Some([
+                        Some(triangle),
+                        Some(Triangle::new(v2, v4, v3, 0xFFFFFF.into())),
+                    ])
+                } else {
+                    Some([Some(triangle), None])
+                }
             } else {
                 None
             }
         })
+        .flatten()
+        .flatten()
         .map(Into::into)
         .collect();
 

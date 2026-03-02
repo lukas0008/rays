@@ -1,5 +1,7 @@
 use std::ops::Mul;
 
+use crate::vec3::Vec3;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Quat {
     pub x: f32,
@@ -16,9 +18,9 @@ impl From<(f32, f32, f32, f32)> for Quat {
 
 impl Quat {
     pub fn from_euler_angles(pitch: f32, yaw: f32, roll: f32) -> Self {
-        let (sp, cp) = pitch.to_radians().sin_cos();
-        let (sy, cy) = yaw.to_radians().sin_cos();
-        let (sr, cr) = roll.to_radians().sin_cos();
+        let (sp, cp) = pitch.sin_cos();
+        let (sy, cy) = yaw.sin_cos();
+        let (sr, cr) = roll.sin_cos();
 
         Self {
             w: cp * cy * cr + sp * sy * sr,
@@ -26,6 +28,29 @@ impl Quat {
             y: cp * sy * cr + sp * cy * sr,
             z: cp * cy * sr - sp * sy * cr,
         }
+    }
+    pub fn from_vector_angle(vec: Vec3) -> Self {
+        let angle = vec.len();
+        if angle == 0. {
+            return Self::identity();
+        }
+        let axis = vec * (1. / angle);
+        let half_angle = angle / 2.;
+        let (s, c) = half_angle.sin_cos();
+        Self {
+            x: axis.x * s,
+            y: axis.y * s,
+            z: axis.z * s,
+            w: c,
+        }
+    }
+    pub fn to_euler_angles(self) -> (f32, f32, f32) {
+        let pitch = (2. * (self.w * self.x - self.y * self.z)).asin();
+        let yaw = (2. * (self.w * self.y + self.z * self.x))
+            .atan2(1. - 2. * (self.x * self.x + self.y * self.y));
+        let roll = (2. * (self.w * self.z + self.x * self.y))
+            .atan2(1. - 2. * (self.y * self.y + self.z * self.z));
+        (pitch, yaw, roll)
     }
     pub fn identity() -> Self {
         Self {

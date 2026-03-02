@@ -17,6 +17,7 @@ pub struct Renderer {
     pub frame_receiver: Receiver<FrameUpdate>,
     pub frame: Vec<u8>,
     pub init_size: (u32, u32),
+    pub on_event: Option<Box<dyn FnMut(winit::event::WindowEvent)>>,
 }
 
 pub enum FrameUpdate {
@@ -36,9 +37,13 @@ impl Renderer {
                 frame_receiver,
                 frame: vec![0u8; init_size.0 as usize * init_size.1 as usize * 4],
                 init_size,
+                on_event: None,
             },
             sender,
         )
+    }
+    pub fn set_on_event<F: FnMut(winit::event::WindowEvent) + 'static>(&mut self, callback: F) {
+        self.on_event = Some(Box::new(callback));
     }
 }
 pub(crate) struct RunningState {
@@ -261,6 +266,9 @@ impl ApplicationHandler for Renderer {
         _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        if let Some(cb) = &mut self.on_event {
+            cb(event.clone());
+        }
         let state = if let Some(state) = &mut self.state {
             state
         } else {

@@ -63,7 +63,7 @@ impl From<Triangle> for Plane {
     fn from(triangle: Triangle) -> Self {
         let v0v1 = triangle.v1 - triangle.v0;
         let v0v2 = triangle.v2 - triangle.v0;
-        let normal = v0v1.cross(&v0v2).normalize();
+        let normal = v0v1.cross(&v0v2);
         Self {
             normal,
             point: triangle.v0,
