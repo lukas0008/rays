@@ -2,7 +2,7 @@ use std::sync::{Arc, atomic::AtomicBool, mpsc::SyncSender};
 
 use itertools::Itertools;
 use rand::seq::SliceRandom;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 
 use crate::{HEIGHT, WIDTH, camera::Camera, model::Model, render::FrameUpdate, vec2::Vec2};
 
