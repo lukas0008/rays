@@ -13,7 +13,6 @@ stuff = []
 arc-swap = "1.8.2"
 bytemuck = "1.25.0"
 itertools = "0.14.0"
-pixels = "0.15.0"
 pollster = "0.4.0"
 rand = "0.10.0"
 rayon = "1.11.0"
