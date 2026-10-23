@@ -139,7 +139,7 @@ impl Vec3 {
         };
         let uv = q_vec.cross(self);
         let uuv = q_vec.cross(&uv);
-        *self + (quat.w * uv) + uuv
+        *self + (2.0 * quat.w * uv) + (2.0 * uuv)
     }
 }
 

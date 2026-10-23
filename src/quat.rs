@@ -18,9 +18,9 @@ impl From<(f32, f32, f32, f32)> for Quat {
 
 impl Quat {
     pub fn from_euler_angles(pitch: f32, yaw: f32, roll: f32) -> Self {
-        let (sp, cp) = pitch.sin_cos();
-        let (sy, cy) = yaw.sin_cos();
-        let (sr, cr) = roll.sin_cos();
+        let (sp, cp) = (pitch * 0.5).sin_cos();
+        let (sy, cy) = (yaw * 0.5).sin_cos();
+        let (sr, cr) = (roll * 0.5).sin_cos();
 
         Self {
             w: cp * cy * cr + sp * sy * sr,
